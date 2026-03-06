@@ -64,6 +64,42 @@ export async function createWorktree(options: {
 }
 
 /**
+ * Roll back a worktree and its associated branch after a failed spawn.
+ *
+ * Best-effort cleanup: errors are swallowed because the caller's original
+ * error is more important. Always call this inside a catch block.
+ */
+export async function rollbackWorktree(
+	repoRoot: string,
+	worktreePath: string,
+	branchName: string,
+): Promise<void> {
+	try {
+		const removeProc = Bun.spawn(["git", "worktree", "remove", "--force", worktreePath], {
+			cwd: repoRoot,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		await removeProc.exited;
+	} catch {
+		// Best-effort
+	}
+
+	if (branchName.length > 0) {
+		try {
+			const branchProc = Bun.spawn(["git", "branch", "-D", branchName], {
+				cwd: repoRoot,
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			await branchProc.exited;
+		} catch {
+			// Best-effort
+		}
+	}
+}
+
+/**
  * Parsed representation of a single worktree entry from `git worktree list --porcelain`.
  */
 interface WorktreeEntry {

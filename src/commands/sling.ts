@@ -38,7 +38,7 @@ import { createRunStore } from "../sessions/store.ts";
 import type { TrackerIssue } from "../tracker/factory.ts";
 import { createTrackerClient, resolveBackend, trackerCliName } from "../tracker/factory.ts";
 import type { AgentSession, OverlayConfig } from "../types.ts";
-import { createWorktree } from "../worktree/manager.ts";
+import { createWorktree, rollbackWorktree } from "../worktree/manager.ts";
 import { spawnHeadlessAgent } from "../worktree/process.ts";
 import {
 	capturePaneContent,
@@ -724,367 +724,357 @@ export async function slingCommand(taskId: string, opts: SlingOptions): Promise<
 			taskId: taskId,
 		});
 
-		// 8. Generate + write overlay CLAUDE.md
-		const agentDefPath = join(config.project.root, config.agents.baseDir, agentDef.file);
-		const baseDefinition = await Bun.file(agentDefPath).text();
-
-		// 8a. Fetch file-scoped mulch expertise if mulch is enabled and files are provided
-		let mulchExpertise: string | undefined;
-		if (config.mulch.enabled && fileScope.length > 0) {
-			try {
-				const mulch = createMulchClient(config.project.root);
-				mulchExpertise = await mulch.prime(undefined, undefined, {
-					files: fileScope,
-					sortByScore: true,
-				});
-			} catch {
-				// Non-fatal: mulch expertise is supplementary context
-				mulchExpertise = undefined;
-			}
-		}
-
-		// Resolve runtime before overlayConfig so we can pass runtime.instructionPath
-		const runtime = getRuntime(opts.runtime, config, capability);
-
-		const overlayConfig: OverlayConfig = {
-			agentName: name,
-			taskId: taskId,
-			specPath: absoluteSpecPath,
-			branchName,
-			worktreePath,
-			fileScope,
-			mulchDomains: config.mulch.enabled
-				? inferDomainsFromFiles(fileScope, config.mulch.domains)
-				: [],
-			parentAgent: parentAgent,
-			depth,
-			canSpawn: agentDef.canSpawn,
-			capability,
-			baseDefinition,
-			mulchExpertise,
-			skipScout: skipScout && capability === "lead",
-			skipReview: opts.skipReview === true && capability === "lead",
-			maxAgentsOverride:
-				opts.dispatchMaxAgents !== undefined
-					? Number.parseInt(opts.dispatchMaxAgents, 10)
-					: undefined,
-			qualityGates: config.project.qualityGates,
-			trackerCli: trackerCliName(resolvedBackend),
-			trackerName: resolvedBackend,
-			instructionPath: runtime.instructionPath,
-		};
-
 		try {
-			await writeOverlay(worktreePath, overlayConfig, config.project.root, runtime.instructionPath);
-		} catch (err) {
-			// Clean up the orphaned worktree created in step 7 (overstory-p4st)
-			try {
-				const cleanupProc = Bun.spawn(["git", "worktree", "remove", "--force", worktreePath], {
-					cwd: config.project.root,
-					stdout: "pipe",
-					stderr: "pipe",
-				});
-				await cleanupProc.exited;
-			} catch {
-				// Best-effort cleanup; the original error is more important
-			}
-			throw err;
-		}
+			// 8. Generate + write overlay CLAUDE.md
+			const agentDefPath = join(config.project.root, config.agents.baseDir, agentDef.file);
+			const baseDefinition = await Bun.file(agentDefPath).text();
 
-		// 9. Resolve runtime + model (needed for deployConfig, spawn, and beacon)
-		const resolvedModel = resolveModel(config, manifest, capability, agentDef.model);
-
-		// 9a. Deploy hooks config (capability-specific guards)
-		await runtime.deployConfig(worktreePath, undefined, {
-			agentName: name,
-			capability,
-			worktreePath,
-			qualityGates: config.project.qualityGates,
-		});
-
-		// 9b. Send auto-dispatch mail so it exists when SessionStart hook fires.
-		// This eliminates the race where coordinator sends dispatch AFTER agent boots.
-		const dispatch = buildAutoDispatch({
-			agentName: name,
-			taskId,
-			capability,
-			specPath: absoluteSpecPath,
-			parentAgent,
-			instructionPath: runtime.instructionPath,
-		});
-		const mailStore = createMailStore(join(overstoryDir, "mail.db"));
-		try {
-			const mailClient = createMailClient(mailStore);
-			mailClient.send({
-				from: dispatch.from,
-				to: dispatch.to,
-				subject: dispatch.subject,
-				body: dispatch.body,
-				type: "dispatch",
-				priority: "normal",
-			});
-		} finally {
-			mailStore.close();
-		}
-
-		// 10. Claim tracker issue
-		if (config.taskTracker.enabled && !skipTaskCheck) {
-			try {
-				await tracker.claim(taskId);
-			} catch {
-				// Non-fatal: issue may already be claimed
-			}
-		}
-
-		// 11. Create agent identity (if new)
-		const identityBaseDir = join(config.project.root, ".overstory", "agents");
-		const existingIdentity = await loadIdentity(identityBaseDir, name);
-		if (!existingIdentity) {
-			await createIdentity(identityBaseDir, {
-				name,
-				capability,
-				created: new Date().toISOString(),
-				sessionsCompleted: 0,
-				expertiseDomains: config.mulch.enabled ? config.mulch.domains : [],
-				recentTasks: [],
-			});
-		}
-
-		// 11b. Save applied mulch record IDs for session-end outcome tracking.
-		// Written to .overstory/agents/{name}/applied-records.json so log.ts
-		// can append outcomes when the session completes.
-		if (mulchExpertise) {
-			const appliedRecords = extractMulchRecordIds(mulchExpertise);
-			if (appliedRecords.length > 0) {
-				const appliedRecordsPath = join(identityBaseDir, name, "applied-records.json");
-				const appliedData = { taskId, agentName: name, capability, records: appliedRecords };
+			// 8a. Fetch file-scoped mulch expertise if mulch is enabled and files are provided
+			let mulchExpertise: string | undefined;
+			if (config.mulch.enabled && fileScope.length > 0) {
 				try {
-					await Bun.write(appliedRecordsPath, `${JSON.stringify(appliedData, null, "\t")}\n`);
+					const mulch = createMulchClient(config.project.root);
+					mulchExpertise = await mulch.prime(undefined, undefined, {
+						files: fileScope,
+						sortByScore: true,
+					});
 				} catch {
-					// Non-fatal: outcome tracking is supplementary context
+					// Non-fatal: mulch expertise is supplementary context
+					mulchExpertise = undefined;
 				}
 			}
-		}
 
-		// 11c. Spawn: headless runtimes bypass tmux entirely; tmux path is unchanged.
-		if (runtime.headless === true && runtime.buildDirectSpawn) {
-			const directEnv = {
-				...runtime.buildEnv(resolvedModel),
-				OVERSTORY_AGENT_NAME: name,
-				OVERSTORY_WORKTREE_PATH: worktreePath,
-			};
-			const argv = runtime.buildDirectSpawn({
-				cwd: worktreePath,
-				env: directEnv,
-				...(resolvedModel.isExplicitOverride ? { model: resolvedModel.model } : {}),
+			// Resolve runtime before overlayConfig so we can pass runtime.instructionPath
+			const runtime = getRuntime(opts.runtime, config, capability);
+
+			const overlayConfig: OverlayConfig = {
+				agentName: name,
+				taskId: taskId,
+				specPath: absoluteSpecPath,
+				branchName,
+				worktreePath,
+				fileScope,
+				mulchDomains: config.mulch.enabled
+					? inferDomainsFromFiles(fileScope, config.mulch.domains)
+					: [],
+				parentAgent: parentAgent,
+				depth,
+				canSpawn: agentDef.canSpawn,
+				capability,
+				baseDefinition,
+				mulchExpertise,
+				skipScout: skipScout && capability === "lead",
+				skipReview: opts.skipReview === true && capability === "lead",
+				maxAgentsOverride:
+					opts.dispatchMaxAgents !== undefined
+						? Number.parseInt(opts.dispatchMaxAgents, 10)
+						: undefined,
+				qualityGates: config.project.qualityGates,
+				trackerCli: trackerCliName(resolvedBackend),
+				trackerName: resolvedBackend,
 				instructionPath: runtime.instructionPath,
-			});
+			};
 
-			// Create a timestamped log dir for this headless agent session.
-			// Always redirect stdout to a file. This prevents SIGPIPE death:
-			// ov sling exits after spawning, closing the pipe's read end.
-			// If stdout is a pipe, the agent dies on the next write (SIGPIPE).
-			// File writes have no such limit, and the agent survives the CLI exit.
-			//
-			// Note: RPC connection wiring is intentionally omitted here. The RPC pipe
-			// is only useful when the spawner stays alive to consume it. ov sling is
-			// a short-lived CLI — any connection created here dies with the process.
-			const logTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
-			const agentLogDir = join(overstoryDir, "logs", name, logTimestamp);
-			mkdirSync(agentLogDir, { recursive: true });
+			await writeOverlay(worktreePath, overlayConfig, config.project.root, runtime.instructionPath);
 
-			const headlessProc = await spawnHeadlessAgent(argv, {
-				cwd: worktreePath,
-				env: { ...(process.env as Record<string, string>), ...directEnv },
-				stdoutFile: join(agentLogDir, "stdout.log"),
-				stderrFile: join(agentLogDir, "stderr.log"),
-			});
+			// 9. Resolve runtime + model (needed for deployConfig, spawn, and beacon)
+			const resolvedModel = resolveModel(config, manifest, capability, agentDef.model);
 
-			// 13. Record session with empty tmuxSession (no tmux pane for headless agents).
-			const session: AgentSession = {
-				id: `session-${Date.now()}-${name}`,
+			// 9a. Deploy hooks config (capability-specific guards)
+			await runtime.deployConfig(worktreePath, undefined, {
 				agentName: name,
 				capability,
 				worktreePath,
-				branchName,
-				taskId: taskId,
-				tmuxSession: "",
-				state: "booting",
-				pid: headlessProc.pid,
-				parentAgent: parentAgent,
-				depth,
-				runId,
-				startedAt: new Date().toISOString(),
-				lastActivity: new Date().toISOString(),
-				escalationLevel: 0,
-				stalledSince: null,
-				transcriptPath: null,
-			};
-			store.upsert(session);
+				qualityGates: config.project.qualityGates,
+			});
 
-			const runStore = createRunStore(join(overstoryDir, "sessions.db"));
+			// 9b. Send auto-dispatch mail so it exists when SessionStart hook fires.
+			// This eliminates the race where coordinator sends dispatch AFTER agent boots.
+			const dispatch = buildAutoDispatch({
+				agentName: name,
+				taskId,
+				capability,
+				specPath: absoluteSpecPath,
+				parentAgent,
+				instructionPath: runtime.instructionPath,
+			});
+			const mailStore = createMailStore(join(overstoryDir, "mail.db"));
 			try {
-				runStore.incrementAgentCount(runId);
+				const mailClient = createMailClient(mailStore);
+				mailClient.send({
+					from: dispatch.from,
+					to: dispatch.to,
+					subject: dispatch.subject,
+					body: dispatch.body,
+					type: "dispatch",
+					priority: "normal",
+				});
 			} finally {
-				runStore.close();
+				mailStore.close();
 			}
 
-			// 14. Output result (headless)
-			if (opts.json ?? false) {
-				jsonOutput("sling", {
+			// 10. Claim tracker issue
+			if (config.taskTracker.enabled && !skipTaskCheck) {
+				try {
+					await tracker.claim(taskId);
+				} catch {
+					// Non-fatal: issue may already be claimed
+				}
+			}
+
+			// 11. Create agent identity (if new)
+			const identityBaseDir = join(config.project.root, ".overstory", "agents");
+			const existingIdentity = await loadIdentity(identityBaseDir, name);
+			if (!existingIdentity) {
+				await createIdentity(identityBaseDir, {
+					name,
+					capability,
+					created: new Date().toISOString(),
+					sessionsCompleted: 0,
+					expertiseDomains: config.mulch.enabled ? config.mulch.domains : [],
+					recentTasks: [],
+				});
+			}
+
+			// 11b. Save applied mulch record IDs for session-end outcome tracking.
+			// Written to .overstory/agents/{name}/applied-records.json so log.ts
+			// can append outcomes when the session completes.
+			if (mulchExpertise) {
+				const appliedRecords = extractMulchRecordIds(mulchExpertise);
+				if (appliedRecords.length > 0) {
+					const appliedRecordsPath = join(identityBaseDir, name, "applied-records.json");
+					const appliedData = { taskId, agentName: name, capability, records: appliedRecords };
+					try {
+						await Bun.write(appliedRecordsPath, `${JSON.stringify(appliedData, null, "\t")}\n`);
+					} catch {
+						// Non-fatal: outcome tracking is supplementary context
+					}
+				}
+			}
+
+			// 11c. Spawn: headless runtimes bypass tmux entirely; tmux path is unchanged.
+			if (runtime.headless === true && runtime.buildDirectSpawn) {
+				const directEnv = {
+					...runtime.buildEnv(resolvedModel),
+					OVERSTORY_AGENT_NAME: name,
+					OVERSTORY_WORKTREE_PATH: worktreePath,
+				};
+				const argv = runtime.buildDirectSpawn({
+					cwd: worktreePath,
+					env: directEnv,
+					...(resolvedModel.isExplicitOverride ? { model: resolvedModel.model } : {}),
+					instructionPath: runtime.instructionPath,
+				});
+
+				// Create a timestamped log dir for this headless agent session.
+				// Always redirect stdout to a file. This prevents SIGPIPE death:
+				// ov sling exits after spawning, closing the pipe's read end.
+				// If stdout is a pipe, the agent dies on the next write (SIGPIPE).
+				// File writes have no such limit, and the agent survives the CLI exit.
+				//
+				// Note: RPC connection wiring is intentionally omitted here. The RPC pipe
+				// is only useful when the spawner stays alive to consume it. ov sling is
+				// a short-lived CLI — any connection created here dies with the process.
+				const logTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
+				const agentLogDir = join(overstoryDir, "logs", name, logTimestamp);
+				mkdirSync(agentLogDir, { recursive: true });
+
+				const headlessProc = await spawnHeadlessAgent(argv, {
+					cwd: worktreePath,
+					env: { ...(process.env as Record<string, string>), ...directEnv },
+					stdoutFile: join(agentLogDir, "stdout.log"),
+					stderrFile: join(agentLogDir, "stderr.log"),
+				});
+
+				// 13. Record session with empty tmuxSession (no tmux pane for headless agents).
+				const session: AgentSession = {
+					id: `session-${Date.now()}-${name}`,
+					agentName: name,
+					capability,
+					worktreePath,
+					branchName,
+					taskId: taskId,
+					tmuxSession: "",
+					state: "booting",
+					pid: headlessProc.pid,
+					parentAgent: parentAgent,
+					depth,
+					runId,
+					startedAt: new Date().toISOString(),
+					lastActivity: new Date().toISOString(),
+					escalationLevel: 0,
+					stalledSince: null,
+					transcriptPath: null,
+				};
+				store.upsert(session);
+
+				const runStore = createRunStore(join(overstoryDir, "sessions.db"));
+				try {
+					runStore.incrementAgentCount(runId);
+				} finally {
+					runStore.close();
+				}
+
+				// 14. Output result (headless)
+				if (opts.json ?? false) {
+					jsonOutput("sling", {
+						agentName: name,
+						capability,
+						taskId,
+						branch: branchName,
+						worktree: worktreePath,
+						tmuxSession: "",
+						pid: headlessProc.pid,
+					});
+				} else {
+					printSuccess("Agent launched (headless)", name);
+					process.stdout.write(`   Task:     ${taskId}\n`);
+					process.stdout.write(`   Branch:   ${branchName}\n`);
+					process.stdout.write(`   Worktree: ${worktreePath}\n`);
+					process.stdout.write(`   PID:      ${headlessProc.pid}\n`);
+				}
+			} else {
+				// 11c. Preflight: verify tmux is available before attempting session creation
+				await ensureTmuxAvailable();
+
+				// 12. Create tmux session running claude in interactive mode
+				const tmuxSessionName = `overstory-${config.project.name}-${name}`;
+				const spawnCmd = runtime.buildSpawnCommand({
+					model: resolvedModel.model,
+					permissionMode: "bypass",
+					cwd: worktreePath,
+					env: {
+						...runtime.buildEnv(resolvedModel),
+						OVERSTORY_AGENT_NAME: name,
+						OVERSTORY_WORKTREE_PATH: worktreePath,
+					},
+				});
+				const pid = await createSession(tmuxSessionName, worktreePath, spawnCmd, {
+					...runtime.buildEnv(resolvedModel),
+					OVERSTORY_AGENT_NAME: name,
+					OVERSTORY_WORKTREE_PATH: worktreePath,
+				});
+
+				// 13. Record session BEFORE sending the beacon so that hook-triggered
+				// updateLastActivity() can find the entry and transition booting->working.
+				// Without this, a race exists: hooks fire before the session is persisted,
+				// leaving the agent stuck in "booting" (overstory-036f).
+				const session: AgentSession = {
+					id: `session-${Date.now()}-${name}`,
+					agentName: name,
+					capability,
+					worktreePath,
+					branchName,
+					taskId: taskId,
+					tmuxSession: tmuxSessionName,
+					state: "booting",
+					pid,
+					parentAgent: parentAgent,
+					depth,
+					runId,
+					startedAt: new Date().toISOString(),
+					lastActivity: new Date().toISOString(),
+					escalationLevel: 0,
+					stalledSince: null,
+					transcriptPath: null,
+				};
+
+				store.upsert(session);
+
+				// Increment agent count for the run
+				const runStore = createRunStore(join(overstoryDir, "sessions.db"));
+				try {
+					runStore.incrementAgentCount(runId);
+				} finally {
+					runStore.close();
+				}
+
+				// 13b. Give slow shells time to finish initializing before polling for TUI readiness.
+				const shellDelay = config.runtime?.shellInitDelayMs ?? 0;
+				if (shellDelay > 0) {
+					await Bun.sleep(shellDelay);
+				}
+
+				// Wait for Claude Code TUI to render before sending input.
+				// Polling capture-pane is more reliable than a fixed sleep because
+				// TUI init time varies by machine load and model state.
+				await waitForTuiReady(tmuxSessionName, (content) => runtime.detectReady(content));
+				// Buffer for the input handler to attach after initial render
+				await Bun.sleep(1_000);
+
+				const beacon = buildBeacon({
+					agentName: name,
+					capability,
+					taskId,
+					parentAgent,
+					depth,
+					instructionPath: runtime.instructionPath,
+				});
+				await sendKeys(tmuxSessionName, beacon);
+
+				// 13c. Follow-up Enters with increasing delays to ensure submission.
+				// Claude Code's TUI may consume early Enters during late initialization
+				// (overstory-yhv6). An Enter on an empty input line is harmless.
+				for (const delay of [1_000, 2_000, 3_000, 5_000]) {
+					await Bun.sleep(delay);
+					await sendKeys(tmuxSessionName, "");
+				}
+
+				// 13d. Verify beacon was received — if pane still shows the welcome
+				// screen (detectReady returns "ready"), resend the beacon. Claude Code's TUI
+				// sometimes consumes the Enter keystroke during late initialization, swallowing
+				// the beacon text entirely (overstory-3271).
+				//
+				// Skipped for runtimes that return false from requiresBeaconVerification().
+				// Pi's TUI idle and processing states are indistinguishable via detectReady
+				// (both show "pi v..." header and the token-usage status bar), so the loop
+				// would incorrectly conclude the beacon was not received and spam duplicate
+				// startup messages.
+				const needsVerification =
+					!runtime.requiresBeaconVerification || runtime.requiresBeaconVerification();
+				if (needsVerification) {
+					const verifyAttempts = 5;
+					for (let v = 0; v < verifyAttempts; v++) {
+						await Bun.sleep(2_000);
+						const paneContent = await capturePaneContent(tmuxSessionName);
+						if (paneContent) {
+							const readyState = runtime.detectReady(paneContent);
+							if (readyState.phase !== "ready") {
+								break; // Agent is processing — beacon was received
+							}
+						}
+						// Still at welcome/idle screen — resend beacon
+						await sendKeys(tmuxSessionName, beacon);
+						await Bun.sleep(1_000);
+						await sendKeys(tmuxSessionName, ""); // Follow-up Enter
+					}
+				}
+
+				// 14. Output result
+				const output = {
 					agentName: name,
 					capability,
 					taskId,
 					branch: branchName,
 					worktree: worktreePath,
-					tmuxSession: "",
-					pid: headlessProc.pid,
-				});
-			} else {
-				printSuccess("Agent launched (headless)", name);
-				process.stdout.write(`   Task:     ${taskId}\n`);
-				process.stdout.write(`   Branch:   ${branchName}\n`);
-				process.stdout.write(`   Worktree: ${worktreePath}\n`);
-				process.stdout.write(`   PID:      ${headlessProc.pid}\n`);
-			}
-		} else {
-			// 11c. Preflight: verify tmux is available before attempting session creation
-			await ensureTmuxAvailable();
+					tmuxSession: tmuxSessionName,
+					pid,
+				};
 
-			// 12. Create tmux session running claude in interactive mode
-			const tmuxSessionName = `overstory-${config.project.name}-${name}`;
-			const spawnCmd = runtime.buildSpawnCommand({
-				model: resolvedModel.model,
-				permissionMode: "bypass",
-				cwd: worktreePath,
-				env: {
-					...runtime.buildEnv(resolvedModel),
-					OVERSTORY_AGENT_NAME: name,
-					OVERSTORY_WORKTREE_PATH: worktreePath,
-				},
-			});
-			const pid = await createSession(tmuxSessionName, worktreePath, spawnCmd, {
-				...runtime.buildEnv(resolvedModel),
-				OVERSTORY_AGENT_NAME: name,
-				OVERSTORY_WORKTREE_PATH: worktreePath,
-			});
-
-			// 13. Record session BEFORE sending the beacon so that hook-triggered
-			// updateLastActivity() can find the entry and transition booting->working.
-			// Without this, a race exists: hooks fire before the session is persisted,
-			// leaving the agent stuck in "booting" (overstory-036f).
-			const session: AgentSession = {
-				id: `session-${Date.now()}-${name}`,
-				agentName: name,
-				capability,
-				worktreePath,
-				branchName,
-				taskId: taskId,
-				tmuxSession: tmuxSessionName,
-				state: "booting",
-				pid,
-				parentAgent: parentAgent,
-				depth,
-				runId,
-				startedAt: new Date().toISOString(),
-				lastActivity: new Date().toISOString(),
-				escalationLevel: 0,
-				stalledSince: null,
-				transcriptPath: null,
-			};
-
-			store.upsert(session);
-
-			// Increment agent count for the run
-			const runStore = createRunStore(join(overstoryDir, "sessions.db"));
-			try {
-				runStore.incrementAgentCount(runId);
-			} finally {
-				runStore.close();
-			}
-
-			// 13b. Give slow shells time to finish initializing before polling for TUI readiness.
-			const shellDelay = config.runtime?.shellInitDelayMs ?? 0;
-			if (shellDelay > 0) {
-				await Bun.sleep(shellDelay);
-			}
-
-			// Wait for Claude Code TUI to render before sending input.
-			// Polling capture-pane is more reliable than a fixed sleep because
-			// TUI init time varies by machine load and model state.
-			await waitForTuiReady(tmuxSessionName, (content) => runtime.detectReady(content));
-			// Buffer for the input handler to attach after initial render
-			await Bun.sleep(1_000);
-
-			const beacon = buildBeacon({
-				agentName: name,
-				capability,
-				taskId,
-				parentAgent,
-				depth,
-				instructionPath: runtime.instructionPath,
-			});
-			await sendKeys(tmuxSessionName, beacon);
-
-			// 13c. Follow-up Enters with increasing delays to ensure submission.
-			// Claude Code's TUI may consume early Enters during late initialization
-			// (overstory-yhv6). An Enter on an empty input line is harmless.
-			for (const delay of [1_000, 2_000, 3_000, 5_000]) {
-				await Bun.sleep(delay);
-				await sendKeys(tmuxSessionName, "");
-			}
-
-			// 13d. Verify beacon was received — if pane still shows the welcome
-			// screen (detectReady returns "ready"), resend the beacon. Claude Code's TUI
-			// sometimes consumes the Enter keystroke during late initialization, swallowing
-			// the beacon text entirely (overstory-3271).
-			//
-			// Skipped for runtimes that return false from requiresBeaconVerification().
-			// Pi's TUI idle and processing states are indistinguishable via detectReady
-			// (both show "pi v..." header and the token-usage status bar), so the loop
-			// would incorrectly conclude the beacon was not received and spam duplicate
-			// startup messages.
-			const needsVerification =
-				!runtime.requiresBeaconVerification || runtime.requiresBeaconVerification();
-			if (needsVerification) {
-				const verifyAttempts = 5;
-				for (let v = 0; v < verifyAttempts; v++) {
-					await Bun.sleep(2_000);
-					const paneContent = await capturePaneContent(tmuxSessionName);
-					if (paneContent) {
-						const readyState = runtime.detectReady(paneContent);
-						if (readyState.phase !== "ready") {
-							break; // Agent is processing — beacon was received
-						}
-					}
-					// Still at welcome/idle screen — resend beacon
-					await sendKeys(tmuxSessionName, beacon);
-					await Bun.sleep(1_000);
-					await sendKeys(tmuxSessionName, ""); // Follow-up Enter
+				if (opts.json ?? false) {
+					jsonOutput("sling", output);
+				} else {
+					printSuccess("Agent launched", name);
+					process.stdout.write(`   Task:     ${taskId}\n`);
+					process.stdout.write(`   Branch:   ${branchName}\n`);
+					process.stdout.write(`   Worktree: ${worktreePath}\n`);
+					process.stdout.write(`   Tmux:     ${tmuxSessionName}\n`);
+					process.stdout.write(`   PID:      ${pid}\n`);
 				}
 			}
-
-			// 14. Output result
-			const output = {
-				agentName: name,
-				capability,
-				taskId,
-				branch: branchName,
-				worktree: worktreePath,
-				tmuxSession: tmuxSessionName,
-				pid,
-			};
-
-			if (opts.json ?? false) {
-				jsonOutput("sling", output);
-			} else {
-				printSuccess("Agent launched", name);
-				process.stdout.write(`   Task:     ${taskId}\n`);
-				process.stdout.write(`   Branch:   ${branchName}\n`);
-				process.stdout.write(`   Worktree: ${worktreePath}\n`);
-				process.stdout.write(`   Tmux:     ${tmuxSessionName}\n`);
-				process.stdout.write(`   PID:      ${pid}\n`);
-			}
+		} catch (err) {
+			await rollbackWorktree(config.project.root, worktreePath, branchName);
+			throw err;
 		}
 	} finally {
 		store.close();

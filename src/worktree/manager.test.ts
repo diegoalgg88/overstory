@@ -10,7 +10,13 @@ import {
 	createTempGitRepo,
 	getDefaultBranch,
 } from "../test-helpers.ts";
-import { createWorktree, isBranchMerged, listWorktrees, removeWorktree } from "./manager.ts";
+import {
+	createWorktree,
+	isBranchMerged,
+	listWorktrees,
+	removeWorktree,
+	rollbackWorktree,
+} from "./manager.ts";
 
 /**
  * Run a git command in a directory and return stdout. Throws on non-zero exit.
@@ -433,6 +439,64 @@ describe("removeWorktree", () => {
 		expect(existsSync(wtPath)).toBe(false);
 
 		// But branch still exists because -d failed silently
+		const branchList = await git(repoDir, ["branch", "--list"]);
+		expect(branchList).toContain("overstory/auth-login/bead-abc");
+	});
+});
+
+describe("rollbackWorktree", () => {
+	let repoDir: string;
+	let worktreesDir: string;
+	let defaultBranch: string;
+
+	beforeEach(async () => {
+		repoDir = realpathSync(await createTempGitRepo());
+		defaultBranch = await getDefaultBranch(repoDir);
+		worktreesDir = join(repoDir, ".overstory", "worktrees");
+		await mkdir(worktreesDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await cleanupTempDir(repoDir);
+	});
+
+	test("removes worktree directory and branch", async () => {
+		const { path: wtPath, branch } = await createWorktree({
+			repoRoot: repoDir,
+			baseDir: worktreesDir,
+			agentName: "auth-login",
+			baseBranch: defaultBranch,
+			taskId: "bead-abc",
+		});
+
+		expect(existsSync(wtPath)).toBe(true);
+
+		await rollbackWorktree(repoDir, wtPath, branch);
+
+		expect(existsSync(wtPath)).toBe(false);
+		const branchList = await git(repoDir, ["branch", "--list"]);
+		expect(branchList).not.toContain("overstory/auth-login/bead-abc");
+	});
+
+	test("does not throw for a non-existent worktree path", async () => {
+		const fakePath = join(worktreesDir, "does-not-exist");
+		await expect(rollbackWorktree(repoDir, fakePath, "")).resolves.toBeUndefined();
+	});
+
+	test("skips branch deletion when branchName is empty", async () => {
+		const { path: wtPath } = await createWorktree({
+			repoRoot: repoDir,
+			baseDir: worktreesDir,
+			agentName: "auth-login",
+			baseBranch: defaultBranch,
+			taskId: "bead-abc",
+		});
+
+		// Pass empty branch — should not throw and worktree should still be removed
+		await rollbackWorktree(repoDir, wtPath, "");
+
+		expect(existsSync(wtPath)).toBe(false);
+		// Branch still exists (we didn't delete it)
 		const branchList = await git(repoDir, ["branch", "--list"]);
 		expect(branchList).toContain("overstory/auth-login/bead-abc");
 	});

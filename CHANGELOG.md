@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-03-11
+
+### Added
+
+#### Codebase Discovery Command
+- **`ov discover`** — new top-level command that spawns parallel scout agents to explore a brownfield codebase and produce structured mulch records, with categories for architecture, conventions, testing, dependencies, and more
+- **`src/commands/discover.ts`** — implementation with `DiscoveryCategory` interface and `DISCOVERY_CATEGORIES` constant defining research areas
+- **`src/commands/discover.test.ts`** — test suite for the discover command
+
+#### Canopy Client & Prompt Versioning
+- **`src/canopy/client.ts`** — new `CanopyClient` wrapper providing programmatic access to canopy prompt rendering, listing, and emission
+- **`src/canopy/client.test.ts`** — test suite for the canopy client
+- **`promptVersion` session tracking** — `SessionStore` now records which canopy prompt version was active when a session started, enabling prompt-change auditing
+
+#### Profile System
+- **`--profile` flag on `ov sling` and `ov coordinator start`** — pass a named profile to customize agent behavior via canopy prompt overlays
+- **`PROFILE_INSTRUCTIONS` placeholder** in `overlay.md.tmpl` — the overlay pipeline now supports injecting profile-specific instructions into agent overlays
+
+#### Co-Creation Workflow
+- **`agents/ov-co-creation.md`** — new canopy prompt extending ov-delivery for collaborative human-in-the-loop workflows
+- **`decision_gate` mail type** — new semantic mail type for human-in-the-loop decision points, enabling agents to pause and request human approval before proceeding
+
+#### Guided Workflow Setup
+- **`.claude/commands/customize.md`** — new guided workflow setup skill for interactive agent customization
+- **`.claude/commands/discover.md`** — new discover skill for brownfield codebase exploration
+
+### Fixed
+
+- **`process.exit()` replaced with `process.exitCode`** in `watch.ts` and `dashboard.ts` — prevents abrupt termination that could skip cleanup handlers
+- **Ecosystem test CI resilience** — `ecosystem.test.ts` no longer fails in CI environments where `ov` is not globally installed
+
+### Changed
+
+- CLI command count: 35 → 36 (new `ov discover` command)
+
+### Testing
+
+- 3387 tests across 102 files (7997 `expect()` calls)
+
 ## [0.8.7] - 2026-03-10
 
 ### Added
@@ -1546,7 +1585,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Biome configuration for formatting and linting
 - TypeScript strict mode with `noUncheckedIndexedAccess`
 
-[Unreleased]: https://github.com/jayminwest/overstory/compare/v0.8.7...HEAD
+[Unreleased]: https://github.com/jayminwest/overstory/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/jayminwest/overstory/compare/v0.8.7...v0.9.0
 [0.8.7]: https://github.com/jayminwest/overstory/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/jayminwest/overstory/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/jayminwest/overstory/compare/v0.8.4...v0.8.5

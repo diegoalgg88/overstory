@@ -602,6 +602,69 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// ========================================
+	// CUSTOM COMMANDS (UI Integration)
+	// ========================================
+
+	/**
+	 * /overstory - Overstory multi-agent commands
+	 */
+	pi.registerCommand("overstory", {
+		description: "Overstory multi-agent orchestration",
+		getArgumentCompletions: (prefix: string) => {
+			const subcommands = ["status", "mail", "prime", "merge", "sling", "doctor"];
+			const filtered = subcommands.filter((s: string) => s.startsWith(prefix));
+			return filtered.length > 0 ? filtered.map((s) => ({ value: s, label: s })) : null;
+		},
+		handler: async (args: string, ctx) => {
+			const parts = args.trim().split(/\s+/);
+			const subcommand = parts[0] || "";
+
+			try {
+				let output: string;
+
+				switch (subcommand) {
+					case "status":
+						output = await runOvCommandWithOutput("ov status", ctx);
+						break;
+					case "mail":
+						const mailArgs = parts.slice(1).join(" ");
+						if (mailArgs.includes("--to")) {
+							output = await runOvCommandWithOutput(`ov mail send ${mailArgs}`, ctx);
+						} else {
+							output = await runOvCommandWithOutput("ov mail check", ctx);
+						}
+						break;
+					case "prime":
+						output = await runOvCommandWithOutput("ov prime --agent orchestrator", ctx);
+						break;
+					case "merge":
+						output = await runOvCommandWithOutput("ov merge", ctx);
+						break;
+					case "sling":
+						const slingArgs = parts.slice(1).join(" ");
+						output = await runOvCommandWithOutput(`ov sling ${slingArgs}`, ctx);
+						break;
+					case "doctor":
+						output = await runOvCommandWithOutput("ov doctor", ctx);
+						break;
+					case "":
+						// Show status by default
+						output = await runOvCommandWithOutput("ov status", ctx);
+						break;
+					default:
+						ctx.ui?.notify?.(`Unknown subcommand: ${subcommand}`, "warning");
+						ctx.ui?.notify?.("Available: status, mail, prime, merge, sling, doctor", "info");
+						return;
+				}
+
+				ctx.ui?.notify?.(output || "Command executed", "info");
+			} catch (error: any) {
+				ctx.ui?.notify?.(`Overstory error: ${error.message}`, "error");
+			}
+		},
+	});
+
+	// ========================================
 	// EVENT BUS INTEGRATION
 	// ========================================
 

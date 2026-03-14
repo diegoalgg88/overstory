@@ -5,7 +5,7 @@
  *
  * Manages orchestrator hooks for Pi (Google ADK).
  * Pi uses TypeScript extensions with factory functions - NOT shell commands.
- * 
+ *
  * According to Pi architecture analysis:
  * - Extensions are TypeScript modules with default export factory function
  * - Located in ~/.pi/agent/extensions/ or specified in settings.json
@@ -16,8 +16,8 @@
 
 import { existsSync } from "node:fs";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { Command } from "commander";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
@@ -64,14 +64,14 @@ function getPiSettingsPath(): string {
 
 /**
  * Generate TypeScript extension for Pi.
- * 
+ *
  * Pi extensions use factory functions with ExtensionAPI.
  * This creates a comprehensive Overstory integration extension.
  */
 function generatePiExtension(hooks: OverstoryHooksConfig): string {
 	// Map Overstory events to Pi events
 	const eventMappings = generateEventMappings(hooks);
-	
+
 	return `/**
  * Overstory Integration Extension for Pi (Google ADK)
  * 
@@ -449,7 +449,7 @@ export default function (pi: ExtensionAPI) {
  */
 function generateEventMappings(hooks: OverstoryHooksConfig): string {
 	const mappings: string[] = [];
-	
+
 	for (const [ovEvent, entries] of Object.entries(hooks.hooks)) {
 		for (const entry of entries) {
 			for (const hook of entry.hooks) {
@@ -465,7 +465,7 @@ function generateEventMappings(hooks: OverstoryHooksConfig): string {
 			}
 		}
 	}
-	
+
 	return mappings.join(", ");
 }
 
@@ -509,13 +509,13 @@ async function installHooksPi(force: boolean): Promise<void> {
 
 	// Write extension
 	await writeFile(extensionPath, extensionCode, "utf-8");
-	
+
 	printSuccess("Created Overstory extension");
 	printHint(`  ${extensionPath}`);
 
 	// Update settings.json to include extension
 	let settings: PiSettings = {};
-	
+
 	if (existsSync(settingsPath)) {
 		try {
 			const content = await readFile(settingsPath, "utf-8");
@@ -524,9 +524,12 @@ async function installHooksPi(force: boolean): Promise<void> {
 			if (force) {
 				printWarning("Existing settings.json is invalid, will create new");
 			} else {
-				throw new ValidationError("settings.json exists but is invalid. Use --force to overwrite.", {
-					field: "settings",
-				});
+				throw new ValidationError(
+					"settings.json exists but is invalid. Use --force to overwrite.",
+					{
+						field: "settings",
+					},
+				);
 			}
 		}
 	}
@@ -541,7 +544,7 @@ async function installHooksPi(force: boolean): Promise<void> {
 
 	// Remove any absolute paths to this extension (cleanup from previous installs)
 	settings.extensions = settings.extensions.filter(
-		ext => !ext.includes("overstory-integration.ts")
+		(ext) => !ext.includes("overstory-integration.ts"),
 	);
 
 	// Add the relative path
@@ -584,7 +587,7 @@ async function installMulchExtension(force: boolean): Promise<void> {
 	if (!(await sourceFile.exists())) {
 		throw new ValidationError(
 			`Mulch extension not found at ${sourcePath}. Ensure you're running from the overstory project root.`,
-			{ field: "source" }
+			{ field: "source" },
 		);
 	}
 
@@ -621,9 +624,12 @@ async function installMulchExtension(force: boolean): Promise<void> {
 			if (force) {
 				printWarning("Existing settings.json is invalid, will create new");
 			} else {
-				throw new ValidationError("settings.json exists but is invalid. Use --force to overwrite.", {
-					field: "settings",
-				});
+				throw new ValidationError(
+					"settings.json exists but is invalid. Use --force to overwrite.",
+					{
+						field: "settings",
+					},
+				);
 			}
 		}
 	}
@@ -637,9 +643,7 @@ async function installMulchExtension(force: boolean): Promise<void> {
 	const relativeMulchExtensionPath = "~/.pi/agent/extensions/mulch-pi-extension.ts";
 
 	// Remove any absolute paths to this extension (cleanup from previous installs)
-	settings.extensions = settings.extensions.filter(
-		ext => !ext.includes("mulch-pi-extension.ts")
-	);
+	settings.extensions = settings.extensions.filter((ext) => !ext.includes("mulch-pi-extension.ts"));
 
 	// Add the relative path
 	settings.extensions.push(relativeMulchExtensionPath);
@@ -693,9 +697,7 @@ async function uninstallMulchExtension(): Promise<void> {
 
 			if (settings.extensions) {
 				const beforeLength = settings.extensions.length;
-				settings.extensions = settings.extensions.filter(
-					ext => !ext.includes("mulch")
-				);
+				settings.extensions = settings.extensions.filter((ext) => !ext.includes("mulch"));
 
 				if (settings.extensions.length < beforeLength) {
 					await writeFile(settingsPath, JSON.stringify(settings, null, "\t"), "utf-8");
@@ -731,9 +733,7 @@ async function statusMulchExtension(json: boolean): Promise<void> {
 			const settings = JSON.parse(content) as PiSettings;
 
 			if (settings.extensions) {
-				settingsHasExtension = settings.extensions.some(
-					ext => ext.includes("mulch")
-				);
+				settingsHasExtension = settings.extensions.some((ext) => ext.includes("mulch"));
 			}
 		} catch {
 			// Ignore parse errors
@@ -772,13 +772,13 @@ async function installSeedsExtension(force: boolean): Promise<void> {
 	if (!(await sourceFile.exists())) {
 		throw new ValidationError(
 			`Seeds extension not found at ${sourcePath}. Run 'ov hooks-pi generate-seeds' first.`,
-			{ field: "source" }
+			{ field: "source" },
 		);
 	}
 
 	// Get paths
 	const piExtensionsDir = getPiExtensionsDir();
-	const extensionPath = join(piExtensionsDir(), "seeds-pi-extension.ts");
+	const extensionPath = join(piExtensionsDir, "seeds-pi-extension.ts");
 	const settingsPath = getPiSettingsPath();
 
 	// Create extensions directory if needed
@@ -802,9 +802,12 @@ async function installSeedsExtension(force: boolean): Promise<void> {
 			if (force) {
 				printWarning("Existing settings.json is invalid, will create new");
 			} else {
-				throw new ValidationError("settings.json exists but is invalid. Use --force to overwrite.", {
-					field: "settings",
-				});
+				throw new ValidationError(
+					"settings.json exists but is invalid. Use --force to overwrite.",
+					{
+						field: "settings",
+					},
+				);
 			}
 		}
 	}
@@ -818,9 +821,7 @@ async function installSeedsExtension(force: boolean): Promise<void> {
 	const relativeSeedsExtensionPath = "~/.pi/agent/extensions/seeds-pi-extension.ts";
 
 	// Remove any absolute paths to this extension (cleanup from previous installs)
-	settings.extensions = settings.extensions.filter(
-		ext => !ext.includes("seeds-pi-extension.ts")
-	);
+	settings.extensions = settings.extensions.filter((ext) => !ext.includes("seeds-pi-extension.ts"));
 
 	// Add the relative path
 	settings.extensions.push(relativeSeedsExtensionPath);
@@ -873,9 +874,7 @@ async function uninstallSeedsExtension(): Promise<void> {
 
 			if (settings.extensions) {
 				const beforeLength = settings.extensions.length;
-				settings.extensions = settings.extensions.filter(
-					ext => !ext.includes("seeds")
-				);
+				settings.extensions = settings.extensions.filter((ext) => !ext.includes("seeds"));
 
 				if (settings.extensions.length < beforeLength) {
 					await writeFile(settingsPath, JSON.stringify(settings, null, "\t"), "utf-8");
@@ -905,9 +904,7 @@ async function statusSeedsExtension(json: boolean): Promise<void> {
 			const settings = JSON.parse(content) as PiSettings;
 
 			if (settings.extensions) {
-				settingsHasExtension = settings.extensions.some(
-					ext => ext.includes("seeds")
-				);
+				settingsHasExtension = settings.extensions.some((ext) => ext.includes("seeds"));
 			}
 		} catch {
 			// Ignore parse errors
@@ -954,9 +951,7 @@ async function uninstallHooksPi(): Promise<void> {
 
 			if (settings.extensions) {
 				const beforeLength = settings.extensions.length;
-				settings.extensions = settings.extensions.filter(
-					ext => !ext.includes("overstory")
-				);
+				settings.extensions = settings.extensions.filter((ext) => !ext.includes("overstory"));
 
 				if (settings.extensions.length < beforeLength) {
 					await writeFile(settingsPath, JSON.stringify(settings, null, "\t"), "utf-8");
@@ -983,18 +978,16 @@ async function statusHooksPi(json: boolean): Promise<void> {
 
 	const sourceExists = await Bun.file(sourcePath).exists();
 	const extensionExists = existsSync(extensionPath);
-	
+
 	let settingsHasExtension = false;
-	
+
 	if (existsSync(settingsPath)) {
 		try {
 			const content = await readFile(settingsPath, "utf-8");
 			const settings = JSON.parse(content) as PiSettings;
-			
+
 			if (settings.extensions) {
-				settingsHasExtension = settings.extensions.some(
-					ext => ext.includes("overstory")
-				);
+				settingsHasExtension = settings.extensions.some((ext) => ext.includes("overstory"));
 			}
 		} catch {
 			// Ignore parse errors
@@ -1008,11 +1001,13 @@ async function statusHooksPi(json: boolean): Promise<void> {
 			settingsHasExtension,
 		});
 	} else {
-		console.log(`Hooks source (.overstory/hooks.json): ${sourceExists ? "✓ present" : "✗ missing"}`);
+		console.log(
+			`Hooks source (.overstory/hooks.json): ${sourceExists ? "✓ present" : "✗ missing"}`,
+		);
 		console.log(`Overstory extension: ${extensionExists ? "✓ exists" : "✗ missing"}`);
 		console.log(`Pi settings.json: ${existsSync(settingsPath) ? "✓ exists" : "✗ missing"}`);
 		console.log(`Extension in settings: ${settingsHasExtension ? "✓ yes" : "✗ no"}`);
-		
+
 		if (!extensionExists && sourceExists) {
 			printHint("");
 			printHint("Run ov hooks-pi install");

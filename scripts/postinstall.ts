@@ -11,10 +11,10 @@
  * Safe to run multiple times - skips if already installed.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..");
@@ -30,7 +30,9 @@ async function main(): Promise<void> {
 
 	// Check if Pi is installed
 	if (!existsSync(PI_DIR)) {
-		console.log("[overstory] Postinstall: Pi not detected (~/.pi/agent not found). Skipping hooks installation.");
+		console.log(
+			"[overstory] Postinstall: Pi not detected (~/.pi/agent not found). Skipping hooks installation.",
+		);
 		return;
 	}
 
@@ -76,24 +78,30 @@ async function main(): Promise<void> {
 
 		// Use tilde path for registration
 		const tildePath = "~/.pi/agent/extensions/overstory-integration.ts";
-		
-		const alreadyRegistered = settings.extensions.some((ext: string) =>
-			ext === tildePath || ext.includes("overstory-integration.ts")
+
+		const alreadyRegistered = settings.extensions.some(
+			(ext: string) => ext === tildePath || ext.includes("overstory-integration.ts"),
 		);
 
 		if (!alreadyRegistered) {
 			settings.extensions.push(tildePath);
 			writeFileSync(PI_SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
 			console.log(`[overstory] Postinstall: Extension registered in settings.json as ${tildePath}`);
-		} else if (settings.extensions.some((ext: string) => ext.includes("overstory-integration.ts") && ext !== tildePath)) {
+		} else if (
+			settings.extensions.some(
+				(ext: string) => ext.includes("overstory-integration.ts") && ext !== tildePath,
+			)
+		) {
 			// Update existing registration to use tilde path
-			settings.extensions = settings.extensions.map((ext: string) => 
-				ext.includes("overstory-integration.ts") ? tildePath : ext
+			settings.extensions = settings.extensions.map((ext: string) =>
+				ext.includes("overstory-integration.ts") ? tildePath : ext,
 			);
 			writeFileSync(PI_SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
-			console.log(`[overstory] Postinstall: Updated extension registration to use tilde path: ${tildePath}`);
+			console.log(
+				`[overstory] Postinstall: Updated extension registration to use tilde path: ${tildePath}`,
+			);
 		}
-		
+
 		console.log("[overstory] Postinstall: Overstory Pi Extension installed successfully!");
 	} catch (error) {
 		console.error(`[overstory] Postinstall: Failed to update settings.json: ${error}`);

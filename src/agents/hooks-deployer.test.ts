@@ -428,9 +428,10 @@ describe("deployHooks", () => {
 		// Use a path that will fail to write
 		// On Unix: /dev/null is a file, so /dev/null/impossible-path fails
 		// On Windows: Use a reserved path that always fails
-		const invalidPath = process.platform === "win32" 
-			? "Z:\\NonExistentDrive\\impossible-path" 
-			: "/dev/null/impossible-path";
+		const invalidPath =
+			process.platform === "win32"
+				? "Z:\\NonExistentDrive\\impossible-path"
+				: "/dev/null/impossible-path";
 
 		try {
 			await deployHooks(invalidPath, "fail-agent");
@@ -2431,12 +2432,12 @@ describe("buildTrackerCloseGuardScript", () => {
 	test("blocks sd close with wrong ID", async () => {
 		const script = buildTrackerCloseGuardScript();
 		const input = JSON.stringify({ command: "sd close other-task" });
-		
+
 		// Skip on Windows - bash script tests require Unix shell
 		if (process.platform === "win32") {
 			return;
 		}
-		
+
 		const proc = Bun.spawn(["sh", "-c", script], {
 			stdin: new TextEncoder().encode(input),
 			stdout: "pipe",
@@ -2454,12 +2455,12 @@ describe("buildTrackerCloseGuardScript", () => {
 	test("allows sd close with matching ID", async () => {
 		const script = buildTrackerCloseGuardScript();
 		const input = JSON.stringify({ command: "sd close my-task" });
-		
+
 		// Skip on Windows - bash script tests require Unix shell
 		if (process.platform === "win32") {
 			return;
 		}
-		
+
 		const proc = Bun.spawn(["sh", "-c", script], {
 			stdin: new TextEncoder().encode(input),
 			stdout: "pipe",
@@ -2474,12 +2475,12 @@ describe("buildTrackerCloseGuardScript", () => {
 	test("blocks bd close with wrong ID", async () => {
 		const script = buildTrackerCloseGuardScript();
 		const input = JSON.stringify({ command: "bd close other-task" });
-		
+
 		// Skip on Windows - bash script tests require Unix shell
 		if (process.platform === "win32") {
 			return;
 		}
-		
+
 		const proc = Bun.spawn(["sh", "-c", script], {
 			stdin: new TextEncoder().encode(input),
 			stdout: "pipe",
@@ -2496,12 +2497,12 @@ describe("buildTrackerCloseGuardScript", () => {
 	test("blocks sd update --status with wrong ID", async () => {
 		const script = buildTrackerCloseGuardScript();
 		const input = JSON.stringify({ command: "sd update other-task --status in_progress" });
-		
+
 		// Skip on Windows - bash script tests require Unix shell
 		if (process.platform === "win32") {
 			return;
 		}
-		
+
 		const proc = Bun.spawn(["sh", "-c", script], {
 			stdin: new TextEncoder().encode(input),
 			stdout: "pipe",
@@ -2518,12 +2519,12 @@ describe("buildTrackerCloseGuardScript", () => {
 	test("exits early when OVERSTORY_TASK_ID is empty (coordinator/monitor)", async () => {
 		const script = buildTrackerCloseGuardScript();
 		const input = JSON.stringify({ command: "sd close coordinator-task" });
-		
+
 		// Skip on Windows - bash script tests require Unix shell
 		if (process.platform === "win32") {
 			return;
 		}
-		
+
 		const proc = Bun.spawn(["sh", "-c", script], {
 			stdin: new TextEncoder().encode(input),
 			stdout: "pipe",
@@ -2631,12 +2632,12 @@ describe("escapeForSingleQuotedShell", () => {
 		expect(taskGuard).toBeDefined();
 		const cmd = taskGuard?.hooks[0]?.command ?? "";
 		const echoCmd = cmd.replace('[ -z "$OVERSTORY_AGENT_NAME" ] && exit 0; ', "");
-		
+
 		// Skip on Windows - bash script tests require Unix shell
 		if (process.platform === "win32") {
 			return;
 		}
-		
+
 		const proc = Bun.spawn(["sh", "-c", echoCmd], {
 			stdout: "pipe",
 			stderr: "pipe",

@@ -65,7 +65,9 @@ describe("watchCommand", () => {
 	afterEach(async () => {
 		process.stdout.write = originalWrite;
 		process.stderr.write = originalStderrWrite;
-		process.exitCode = originalExitCode;
+		if (originalExitCode != null) {
+			process.exitCode = originalExitCode;
+		}
 		process.chdir(originalCwd);
 		await cleanupTempDir(tempDir);
 	});

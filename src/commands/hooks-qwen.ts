@@ -5,7 +5,7 @@
  *
  * Manages orchestrator hooks for Qwen Code.
  * Qwen Code uses shell commands in .qwen/settings.json - NOT Python hooks.
- * 
+ *
  * According to Qwen Code architecture analysis:
  * - Hooks are shell commands executed via child_process.spawn
  * - Config is in .qwen/settings.json under "hooks" key
@@ -15,8 +15,8 @@
 
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { Command } from "commander";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
@@ -70,7 +70,7 @@ function getOverstoryWrapperScriptPath(): string {
 
 /**
  * Convert Overstory hooks to Qwen Code settings.json format.
- * 
+ *
  * Qwen Code uses shell commands, so we create a Python wrapper script
  * and configure settings.json to call it with appropriate arguments.
  */
@@ -80,53 +80,53 @@ function generateQwenHooksConfig(hooks: OverstoryHooksConfig): {
 } {
 	// Generate wrapper Python script
 	const wrapperScript = generateWrapperScript();
-	
+
 	// Generate settings.json hooks config
 	const qwenHooks: Record<string, QwenHookDefinition[]> = {};
-	
+
 	const wrapperPath = getOverstoryWrapperScriptPath();
-	
+
 	// Map Overstory events to Qwen Code events
 	const eventMapping: Record<string, string> = {
-		"SessionStart": "SessionStart",
-		"UserPromptSubmit": "UserPromptSubmit",
-		"PreToolUse": "PreToolUse",
-		"PostToolUse": "PostToolUse",
-		"Stop": "Stop",
-		"PreCompact": "PreCompact",
-		"SessionEnd": "SessionEnd",
+		SessionStart: "SessionStart",
+		UserPromptSubmit: "UserPromptSubmit",
+		PreToolUse: "PreToolUse",
+		PostToolUse: "PostToolUse",
+		Stop: "Stop",
+		PreCompact: "PreCompact",
+		SessionEnd: "SessionEnd",
 	};
-	
+
 	for (const [ovEvent, entries] of Object.entries(hooks.hooks)) {
 		const qwenEvent = eventMapping[ovEvent];
 		if (!qwenEvent) continue;
-		
+
 		const definitions: QwenHookDefinition[] = [];
-		
+
 		for (const entry of entries) {
 			const hookConfigs: QwenHookConfig[] = [];
-			
+
 			for (const hook of entry.hooks) {
 				// Skip complex bash commands that won't work
 				if (hook.command.includes("read -r INPUT") || hook.command.includes("sed")) {
 					continue;
 				}
-				
+
 				// Convert ov command to wrapper script call
 				const wrapperCommand = convertToWrapperCommand(hook.command, wrapperPath);
 				if (!wrapperCommand) continue;
-				
+
 				hookConfigs.push({
 					type: "command",
 					name: `overstory-${ovEvent.toLowerCase()}-${hookConfigs.length}`,
 					command: wrapperCommand,
 					timeout: 30000,
 					env: {
-						"QWEN_PROJECT_DIR": "$QWEN_PROJECT_DIR",
+						QWEN_PROJECT_DIR: "$QWEN_PROJECT_DIR",
 					},
 				});
 			}
-			
+
 			if (hookConfigs.length > 0) {
 				definitions.push({
 					matcher: entry.matcher || "*",
@@ -135,12 +135,12 @@ function generateQwenHooksConfig(hooks: OverstoryHooksConfig): {
 				});
 			}
 		}
-		
+
 		if (definitions.length > 0) {
 			qwenHooks[qwenEvent] = definitions;
 		}
 	}
-	
+
 	const settings: QwenSettings = {
 		hooks: qwenHooks,
 		hooksConfig: {
@@ -148,7 +148,7 @@ function generateQwenHooksConfig(hooks: OverstoryHooksConfig): {
 			disabled: [],
 		},
 	};
-	
+
 	return { settings, wrapperScript };
 }
 
@@ -327,7 +327,7 @@ function convertToWrapperCommand(ovCommand: string, wrapperPath: string): string
 	if (ovCommand.includes("mulch learn")) {
 		return `mulch learn`;
 	}
-	
+
 	// Skip commands we can't convert
 	return null;
 }
@@ -340,15 +340,15 @@ function mergeHooks(existing: QwenSettings, newHooks: QwenSettings): QwenSetting
 		...existing,
 		hooks: { ...existing.hooks },
 	};
-	
+
 	if (newHooks.hooks) {
 		for (const [event, definitions] of Object.entries(newHooks.hooks)) {
 			const existingDefs = merged.hooks?.[event] || [];
 			// Add new definitions, avoiding duplicates by name
-			const existingNames = new Set(existingDefs.flatMap(d => d.hooks.map(h => h.name)));
-			
+			const existingNames = new Set(existingDefs.flatMap((d) => d.hooks.map((h) => h.name)));
+
 			for (const def of definitions) {
-				const newHooksToAdd = def.hooks.filter(h => !existingNames.has(h.name));
+				const newHooksToAdd = def.hooks.filter((h) => !existingNames.has(h.name));
 				if (newHooksToAdd.length > 0) {
 					existingDefs.push({
 						...def,
@@ -356,13 +356,13 @@ function mergeHooks(existing: QwenSettings, newHooks: QwenSettings): QwenSetting
 					});
 				}
 			}
-			
+
 			if (existingDefs.length > 0) {
 				merged.hooks![event] = existingDefs;
 			}
 		}
 	}
-	
+
 	return merged;
 }
 
@@ -393,14 +393,14 @@ async function installHooksQwen(force: boolean): Promise<void> {
 	const wrapperPath = getOverstoryWrapperScriptPath();
 	await mkdir(join(homedir(), ".qwen"), { recursive: true });
 	await writeFile(wrapperPath, wrapperScript, "utf-8");
-	
+
 	printSuccess("Created wrapper script");
 	printHint(`  ${wrapperPath}`);
 
 	// Read existing settings.json
 	const settingsPath = getQwenSettingsPath();
 	let existingSettings: QwenSettings = {};
-	
+
 	if (existsSync(settingsPath)) {
 		try {
 			const content = await readFile(settingsPath, "utf-8");
@@ -409,9 +409,12 @@ async function installHooksQwen(force: boolean): Promise<void> {
 			if (force) {
 				printWarning("Existing settings.json is invalid, will overwrite");
 			} else {
-				throw new ValidationError("settings.json exists but is invalid. Use --force to overwrite.", {
-					field: "settings",
-				});
+				throw new ValidationError(
+					"settings.json exists but is invalid. Use --force to overwrite.",
+					{
+						field: "settings",
+					},
+				);
 			}
 		}
 	}
@@ -421,7 +424,7 @@ async function installHooksQwen(force: boolean): Promise<void> {
 
 	// Write updated settings
 	await writeFile(settingsPath, JSON.stringify(mergedSettings, null, "\t"), "utf-8");
-	
+
 	printSuccess("Updated Qwen Code settings");
 	printHint(`  ${settingsPath}`);
 	printHint("");
@@ -451,28 +454,28 @@ async function uninstallHooksQwen(): Promise<void> {
 	try {
 		const content = await readFile(settingsPath, "utf-8");
 		const settings = JSON.parse(content) as QwenSettings;
-		
+
 		// Remove Overstory hooks
 		let removed = false;
 		if (settings.hooks) {
 			for (const event of Object.keys(settings.hooks)) {
 				const defs = settings.hooks[event] || [];
-				const filtered = defs.filter(def => 
-					!def.hooks.some(h => h.name.startsWith("overstory-"))
+				const filtered = defs.filter(
+					(def) => !def.hooks.some((h) => h.name.startsWith("overstory-")),
 				);
-				
+
 				if (filtered.length < defs.length) {
 					settings.hooks[event] = filtered;
 					removed = true;
 				}
-				
+
 				// Remove empty event arrays
 				if (filtered.length === 0) {
 					delete settings.hooks[event];
 				}
 			}
 		}
-		
+
 		if (removed) {
 			await writeFile(settingsPath, JSON.stringify(settings, null, "\t"), "utf-8");
 			printSuccess("Removed Overstory hooks from Qwen Code settings");
@@ -507,15 +510,15 @@ async function statusHooksQwen(json: boolean): Promise<void> {
 	const sourceExists = await Bun.file(sourcePath).exists();
 	const settingsExists = existsSync(settingsPath);
 	const wrapperExists = existsSync(wrapperPath);
-	
+
 	let hooksInstalled = false;
 	let overstoryHookCount = 0;
-	
+
 	if (settingsExists) {
 		try {
 			const content = await readFile(settingsPath, "utf-8");
 			const settings = JSON.parse(content) as QwenSettings;
-			
+
 			if (settings.hooks) {
 				for (const defs of Object.values(settings.hooks)) {
 					for (const def of defs) {
@@ -542,11 +545,15 @@ async function statusHooksQwen(json: boolean): Promise<void> {
 			overstoryHookCount,
 		});
 	} else {
-		console.log(`Hooks source (.overstory/hooks.json): ${sourceExists ? "✓ present" : "✗ missing"}`);
+		console.log(
+			`Hooks source (.overstory/hooks.json): ${sourceExists ? "✓ present" : "✗ missing"}`,
+		);
 		console.log(`Qwen settings.json: ${settingsExists ? "✓ exists" : "✗ missing"}`);
 		console.log(`Wrapper script: ${wrapperExists ? "✓ exists" : "✗ missing"}`);
-		console.log(`Overstory hooks: ${hooksInstalled ? `✓ ${overstoryHookCount} hooks configured` : "✗ none"}`);
-		
+		console.log(
+			`Overstory hooks: ${hooksInstalled ? `✓ ${overstoryHookCount} hooks configured` : "✗ none"}`,
+		);
+
 		if (!hooksInstalled && sourceExists) {
 			printHint("");
 			printHint("Run ov hooks-qwen install");

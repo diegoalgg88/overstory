@@ -628,66 +628,101 @@ export default function (pi: ExtensionAPI) {
 				switch (subcommand) {
 					case "status":
 						output = await runOvCommandWithOutput("ov status", ctx);
-						break;
+						ctx.ui?.notify?.(output || "Status displayed", "info");
+						return;
 					case "sling":
 						const slingArgs = parts.slice(1).join(" ");
 						if (!slingArgs) {
-							ctx.ui?.notify?.("Usage: /overstory sling <task-id> [--profile <name>]", "info");
+							ctx.ui?.notify?.(
+								"Usage: /overstory sling <task-id> [--profile <name>] [--model <model>]\n\n" +
+								"Examples:\n" +
+								"  /overstory sling fix-auth-bug\n" +
+								"  /overstory sling add-unit-tests --profile senior-dev\n" +
+								"  /overstory sling refactor-database --model qwen/qwen3-coder-480b",
+								"info",
+							);
 							return;
 						}
 						output = await runOvCommandWithOutput(`ov sling ${slingArgs}`, ctx);
-						break;
+						ctx.ui?.notify?.(output || "Agent spawned", "info");
+						return;
 					case "prime":
 						output = await runOvCommandWithOutput("ov prime --agent orchestrator", ctx);
-						break;
+						ctx.ui?.notify?.(output || "Context loaded", "info");
+						return;
 					case "merge":
 						output = await runOvCommandWithOutput("ov merge", ctx);
-						break;
+						ctx.ui?.notify?.(output || "Merge completed", "info");
+						return;
 					case "mail":
 						const mailArgs = parts.slice(1).join(" ");
 						if (mailArgs.includes("--to")) {
 							output = await runOvCommandWithOutput(`ov mail send ${mailArgs}`, ctx);
+							ctx.ui?.notify?.(output || "Mail sent", "info");
 						} else if (mailArgs.includes("--subject") || mailArgs.includes("--body")) {
 							output = await runOvCommandWithOutput(`ov mail send ${mailArgs}`, ctx);
+							ctx.ui?.notify?.(output || "Mail sent", "info");
 						} else {
 							output = await runOvCommandWithOutput("ov mail check", ctx);
+							ctx.ui?.notify?.(output || "Mail check completed", "info");
 						}
-						break;
+						return;
 					case "doctor":
 						output = await runOvCommandWithOutput("ov doctor", ctx);
-						break;
+						ctx.ui?.notify?.(output || "Health checks completed", "info");
+						return;
 					case "init":
 						output = await runOvCommandWithOutput("ov init", ctx);
-						break;
+						ctx.ui?.notify?.(output || "Overstory initialized", "info");
+						return;
 					case "upgrade":
+						ctx.ui?.notify?.("Checking for Overstory updates...", "info");
 						output = await runOvCommandWithOutput("ov upgrade", ctx);
-						break;
+						ctx.ui?.notify?.(output || "Upgrade check completed", "info");
+						return;
 					case "discover":
 						output = await runOvCommandWithOutput("ov discover", ctx);
-						break;
+						ctx.ui?.notify?.(output || "Discovery completed", "info");
+						return;
 					case "inspect":
 						const inspectArgs = parts.slice(1).join(" ");
 						if (!inspectArgs) {
-							ctx.ui?.notify?.("Usage: /overstory inspect <agent-name>", "info");
+							ctx.ui?.notify?.(
+								"Usage: /overstory inspect <agent-name>\n\n" +
+								"Examples:\n" +
+								"  /overstory inspect orchestrator\n" +
+								"  /overstory inspect builder\n" +
+								"  /overstory inspect coordinator",
+								"info",
+							);
 							return;
 						}
 						output = await runOvCommandWithOutput(`ov inspect ${inspectArgs}`, ctx);
-						break;
+						ctx.ui?.notify?.(output || "Inspection completed", "info");
+						return;
 					case "stop":
 						const stopArgs = parts.slice(1).join(" ");
 						if (!stopArgs) {
-							ctx.ui?.notify?.("Usage: /overstory stop <agent-name>", "info");
+							ctx.ui?.notify?.(
+								"Usage: /overstory stop <agent-name>\n\n" +
+								"Examples:\n" +
+								"  /overstory stop builder\n" +
+								"  /overstory stop worker-1",
+								"info",
+							);
 							return;
 						}
 						output = await runOvCommandWithOutput(`ov stop ${stopArgs}`, ctx);
-						break;
+						ctx.ui?.notify?.(output || "Agent stopped", "info");
+						return;
 					case "dashboard":
 						ctx.ui?.notify?.("Dashboard requires TUI - use 'ov dashboard' in terminal", "info");
 						return;
 					case "agents":
 						const agentsArgs = parts.slice(1).join(" ");
 						output = await runOvCommandWithOutput(`ov agents ${agentsArgs}`.trim(), ctx);
-						break;
+						ctx.ui?.notify?.(output || "Agents query completed", "info");
+						return;
 					case "monitor":
 						ctx.ui?.notify?.("Monitor is a persistent agent - start with 'ov monitor' in terminal", "info");
 						return;
@@ -697,14 +732,13 @@ export default function (pi: ExtensionAPI) {
 					case "":
 						// Show status by default
 						output = await runOvCommandWithOutput("ov status", ctx);
-						break;
+						ctx.ui?.notify?.(output || "Status displayed", "info");
+						return;
 					default:
 						ctx.ui?.notify?.(`Unknown subcommand: ${subcommand}`, "warning");
 						ctx.ui?.notify?.("Available: status, sling, prime, merge, mail, doctor, init, upgrade, discover, inspect, stop, dashboard, agents", "info");
 						return;
 				}
-
-				ctx.ui?.notify?.(output || "Command executed", "info");
 			} catch (error: any) {
 				ctx.ui?.notify?.(`Overstory error: ${error.message}`, "error");
 			}

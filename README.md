@@ -46,6 +46,8 @@ bun run lint          # Biome check
 bun run typecheck     # tsc --noEmit
 ```
 
+**Postinstall Script:** After running `bun install`, a postinstall script automatically checks if Pi (Google ADK) is installed and prompts you to run `ov hooks-pi install` if detected. The script does NOT install automatically — it only displays instructions to ensure you're aware of the changes.
+
 ## Quick Start
 
 ```bash
@@ -156,6 +158,9 @@ Every command supports `--json` where noted. Global flags: `-q`/`--quiet`, `--ti
 | `ov hooks install` | Install orchestrator hooks to `.claude/settings.local.json` (`--force`) |
 | `ov hooks uninstall` | Remove orchestrator hooks |
 | `ov hooks status` | Check if hooks are installed |
+| `ov hooks-pi install` | Install Overstory extension for Pi (Google ADK) (`--force`) |
+| `ov hooks-pi uninstall` | Remove Overstory extension from Pi |
+| `ov hooks-pi status` | Check if Pi extension is installed |
 | `ov worktree list` | List worktrees with status |
 | `ov worktree clean` | Remove completed worktrees (`--completed`, `--all`, `--force`) |
 | `ov watch` | Start watchdog daemon — Tier 0 (`--interval`, `--background`) |
@@ -182,12 +187,21 @@ Overstory is runtime-agnostic. The `AgentRuntime` interface (`src/runtimes/types
 |---------|-----|-----------------|-----------|
 | Claude Code | `claude` | `settings.local.json` hooks | Stable |
 | Sapling | `sp` | `.sapling/guards.json` | Stable |
-| Pi | `pi` | `.pi/extensions/` guard extension | Experimental |
+| Pi (Google ADK) | `pi` | `.pi/extensions/` guard extension | Experimental |
 | Copilot | `copilot` | (none — `--allow-all-tools`) | Experimental |
 | Cursor | `agent` | (none — `--yolo`) | Experimental |
 | Codex | `codex` | OS-level sandbox (Seatbelt/Landlock) | Experimental |
 | Gemini | `gemini` | `--sandbox` flag | Experimental |
 | OpenCode | `opencode` | (none) | Experimental |
+
+**Pi Integration:** Overstory provides a TypeScript extension (`~/.pi/agent/extensions/overstory-integration.ts`) that integrates with Pi's extension system. Install with `ov hooks-pi install`. The extension provides:
+- Tool interception and validation via `tool_call` event
+- Context injection via `before_agent_start`
+- Custom tools: `overstory_status`, `overstory_mail`
+- Event bus integration for inter-extension communication
+- Session lifecycle management (`session_start`, `session_shutdown`)
+
+See [HOOKS-MULTIPLATFORM.md](HOOKS-MULTIPLATFORM.md) for detailed integration guides for each platform.
 
 ## How It Works
 

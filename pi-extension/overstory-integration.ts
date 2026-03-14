@@ -614,7 +614,7 @@ export default function (pi: ExtensionAPI) {
 	pi.registerCommand("overstory", {
 		description: "Overstory multi-agent orchestration",
 		getArgumentCompletions: (prefix: string) => {
-			const subcommands = ["status", "mail", "prime", "merge", "sling", "doctor"];
+			const subcommands = ["status", "sling", "prime", "merge", "mail", "doctor", "init", "upgrade", "discover", "inspect", "stop", "dashboard", "agents", "monitor", "coordinator"];
 			const filtered = subcommands.filter((s: string) => s.startsWith(prefix));
 			return filtered.length > 0 ? filtered.map((s) => ({ value: s, label: s })) : null;
 		},
@@ -629,13 +629,13 @@ export default function (pi: ExtensionAPI) {
 					case "status":
 						output = await runOvCommandWithOutput("ov status", ctx);
 						break;
-					case "mail":
-						const mailArgs = parts.slice(1).join(" ");
-						if (mailArgs.includes("--to")) {
-							output = await runOvCommandWithOutput(`ov mail send ${mailArgs}`, ctx);
-						} else {
-							output = await runOvCommandWithOutput("ov mail check", ctx);
+					case "sling":
+						const slingArgs = parts.slice(1).join(" ");
+						if (!slingArgs) {
+							ctx.ui?.notify?.("Usage: /overstory sling <task-id> [--profile <name>]", "info");
+							return;
 						}
+						output = await runOvCommandWithOutput(`ov sling ${slingArgs}`, ctx);
 						break;
 					case "prime":
 						output = await runOvCommandWithOutput("ov prime --agent orchestrator", ctx);
@@ -643,20 +643,64 @@ export default function (pi: ExtensionAPI) {
 					case "merge":
 						output = await runOvCommandWithOutput("ov merge", ctx);
 						break;
-					case "sling":
-						const slingArgs = parts.slice(1).join(" ");
-						output = await runOvCommandWithOutput(`ov sling ${slingArgs}`, ctx);
+					case "mail":
+						const mailArgs = parts.slice(1).join(" ");
+						if (mailArgs.includes("--to")) {
+							output = await runOvCommandWithOutput(`ov mail send ${mailArgs}`, ctx);
+						} else if (mailArgs.includes("--subject") || mailArgs.includes("--body")) {
+							output = await runOvCommandWithOutput(`ov mail send ${mailArgs}`, ctx);
+						} else {
+							output = await runOvCommandWithOutput("ov mail check", ctx);
+						}
 						break;
 					case "doctor":
 						output = await runOvCommandWithOutput("ov doctor", ctx);
 						break;
+					case "init":
+						output = await runOvCommandWithOutput("ov init", ctx);
+						break;
+					case "upgrade":
+						output = await runOvCommandWithOutput("ov upgrade", ctx);
+						break;
+					case "discover":
+						output = await runOvCommandWithOutput("ov discover", ctx);
+						break;
+					case "inspect":
+						const inspectArgs = parts.slice(1).join(" ");
+						if (!inspectArgs) {
+							ctx.ui?.notify?.("Usage: /overstory inspect <agent-name>", "info");
+							return;
+						}
+						output = await runOvCommandWithOutput(`ov inspect ${inspectArgs}`, ctx);
+						break;
+					case "stop":
+						const stopArgs = parts.slice(1).join(" ");
+						if (!stopArgs) {
+							ctx.ui?.notify?.("Usage: /overstory stop <agent-name>", "info");
+							return;
+						}
+						output = await runOvCommandWithOutput(`ov stop ${stopArgs}`, ctx);
+						break;
+					case "dashboard":
+						ctx.ui?.notify?.("Dashboard requires TUI - use 'ov dashboard' in terminal", "info");
+						return;
+					case "agents":
+						const agentsArgs = parts.slice(1).join(" ");
+						output = await runOvCommandWithOutput(`ov agents ${agentsArgs}`.trim(), ctx);
+						break;
+					case "monitor":
+						ctx.ui?.notify?.("Monitor is a persistent agent - start with 'ov monitor' in terminal", "info");
+						return;
+					case "coordinator":
+						ctx.ui?.notify?.("Coordinator is a persistent agent - start with 'ov coordinator' in terminal", "info");
+						return;
 					case "":
 						// Show status by default
 						output = await runOvCommandWithOutput("ov status", ctx);
 						break;
 					default:
 						ctx.ui?.notify?.(`Unknown subcommand: ${subcommand}`, "warning");
-						ctx.ui?.notify?.("Available: status, mail, prime, merge, sling, doctor", "info");
+						ctx.ui?.notify?.("Available: status, sling, prime, merge, mail, doctor, init, upgrade, discover, inspect, stop, dashboard, agents", "info");
 						return;
 				}
 

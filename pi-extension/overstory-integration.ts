@@ -341,11 +341,12 @@ export default function (pi: ExtensionAPI) {
 		logger.log("Session shutting down");
 
 		// Activity tracking for Watchdog Tier 2
+		// Note: ov log uses event as positional arg, not --event flag
 		try {
-			await runOvCommand("ov log activity --event session_shutdown", ctx);
-			logger.debug("Activity logged: session_shutdown");
+			await runOvCommand("ov log session-end --agent orchestrator", ctx);
+			logger.debug("Activity logged: session-end");
 		} catch (error: any) {
-			logger.debug("Failed to log session_shutdown activity", error);
+			logger.debug("Failed to log session-end", error);
 		}
 
 		await cleanupSession(ctx);
@@ -359,13 +360,15 @@ export default function (pi: ExtensionAPI) {
 	 * Tool Execution End - Log activity to prevent zombie classification
 	 */
 	pi.on("tool_execution_end", async (event, ctx) => {
-		// Log activity to prevent watchdog from marking as zombie
+		// Log tool-end event for activity tracking
+		// Note: ov log uses event as positional arg, not --event flag
+		const toolName = (event as any)?.toolName || "unknown";
 		try {
-			await runOvCommand("ov log activity --event tool_execution", ctx);
-			logger.debug("Activity logged: tool_execution");
+			await runOvCommand(`ov log tool-end --agent orchestrator --tool-name ${toolName}`, ctx);
+			logger.debug("Activity logged: tool-end");
 		} catch (error: any) {
 			// Silently ignore - activity logging is optional
-			logger.debug("Failed to log tool_execution activity", error);
+			logger.debug("Failed to log tool-end activity", error);
 		}
 	});
 

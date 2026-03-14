@@ -187,12 +187,39 @@ async function initializeOverstory(ctx: ExtensionContext): Promise<void> {
  */
 export default function (pi: ExtensionAPI) {
 	piAPI = pi;
+
 	/**
-	 * Session Start
+	 * Session Start - Initialize Overstory integration
 	 */
 	pi.on("session_start", async (_event: any, ctx: ExtensionContext) => {
 		logger.log("Session started - initializing Overstory Integration");
 		await initializeOverstory(ctx);
+	});
+
+	/**
+	 * Activity Tracking for Watchdog Tier 2
+	 * Prevents watchdog from marking active agents as zombies
+	 */
+	pi.on("tool_execution_end", async (event: any, ctx: ExtensionContext) => {
+		// Log activity to prevent watchdog from marking as zombie
+		try {
+			await runOvCommand("ov log activity --event tool_execution", ctx);
+			logger.debug("Activity logged: tool_execution");
+		} catch (error: any) {
+			// Silently ignore - activity logging is optional
+			logger.debug("Failed to log tool_execution activity", error);
+		}
+	});
+
+	pi.on("session_shutdown", async (_event: any, ctx: ExtensionContext) => {
+		// Final activity log before shutdown
+		try {
+			await runOvCommand("ov log activity --event session_shutdown", ctx);
+			logger.debug("Activity logged: session_shutdown");
+		} catch (error: any) {
+			// Silently ignore
+			logger.debug("Failed to log session_shutdown activity", error);
+		}
 	});
 
 	// Custom tools for Overstory orchestration
@@ -230,6 +257,63 @@ export default function (pi: ExtensionAPI) {
 						{
 							type: "text",
 							text: `Failed to get status: ${error}`,
+						},
+					],
+					isError: true,
+				};
+			}
+		},
+	});
+
+	/**
+	 * Custom tool: Send Overstory Mail
+	 * Allows agents to communicate via the Overstory mail system
+	 */
+	pi.registerTool({
+		name: "overstory_mail",
+		label: "Send Overstory Mail",
+		description: "Send a message to another agent via Overstory mail system",
+		parameters: {
+			type: "object",
+			properties: {
+				to: { type: "string", description: "Recipient agent name" },
+				subject: { type: "string", description: "Message subject" },
+				body: { type: "string", description: "Message body" },
+			},
+			required: ["to", "body"],
+		} as any,
+		async execute(
+			_toolCallId: string,
+			params: any,
+			_signal: any,
+			_onUpdate: any,
+			ctx: ExtensionContext,
+		) {
+			try {
+				const { to, subject = "Message", body } = params;
+				// Escape double quotes for shell command
+				const escapedBody = body.replace(/"/g, '\\"');
+				const escapedSubject = subject.replace(/"/g, '\\"');
+
+				await runOvCommand(
+					`ov mail send --to "${to}" --subject "${escapedSubject}" --body "${escapedBody}"`,
+					ctx,
+				);
+
+				return {
+					content: [
+						{
+							type: "text",
+							text: `✓ Mail sent to ${to}`,
+						},
+					],
+				};
+			} catch (error: any) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Failed to send mail: ${error}`,
 						},
 					],
 					isError: true,

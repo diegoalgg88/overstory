@@ -53,7 +53,7 @@
 		"@biomejs/biome": "^2.3.15",
 		"@types/bun": "latest",
 		"@types/js-yaml": "^4.0.9",
-		"typescript": "^5.9.0",
+		"typescript": "^6.0.3",
 		"@types/node": "^20.11.24",
 		"@mariozechner/pi-coding-agent": "latest"
 	}
